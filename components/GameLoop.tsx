@@ -1,14 +1,15 @@
+
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { GameMode, GameState, CarObject, GameStats, Particle } from '../types';
 import { 
   CANVAS_WIDTH, CANVAS_HEIGHT, FPS, 
   PLAYER_WIDTH, PLAYER_HEIGHT, CAR_WIDTH, CAR_HEIGHT,
   MAX_SPEED, ACCELERATION, BRAKING, TURN_SPEED,
-  LANE_WIDTH, COLORS, TIME_TRIAL_DURATION
+  LANE_WIDTH, COLORS, TIME_TRIAL_DURATION, LANE_COUNT
 } from '../constants';
-import { drawCar, getRandomLaneX, checkCollision, createExplosion } from '../utils/gameUtils';
+import { drawCar, checkCollision, createExplosion } from '../utils/gameUtils';
 import HUD from './HUD';
-import { ArrowLeft, ArrowRight, ArrowUp, ArrowDown, Pause, Play } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ArrowUp, ArrowDown, Play } from 'lucide-react';
 
 interface GameLoopProps {
   mode: GameMode;
@@ -16,15 +17,18 @@ interface GameLoopProps {
   onExit: () => void;
 }
 
+const GRASS_WIDTH = 10;
+
 const GameLoop: React.FC<GameLoopProps> = ({ mode, onGameOver, onExit }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number>();
   const [gameState, setGameState] = useState<GameState>('PLAYING');
   
   // Game State Refs (Mutable for performance)
+  // Start player in Lane 2 (Index 1)
   const playerRef = useRef<CarObject>({
     id: 0,
-    x: CANVAS_WIDTH / 2 - PLAYER_WIDTH / 2,
+    x: LANE_WIDTH * 1 + (LANE_WIDTH - PLAYER_WIDTH) / 2,
     y: CANVAS_HEIGHT - PLAYER_HEIGHT - 20,
     width: PLAYER_WIDTH,
     height: PLAYER_HEIGHT,
@@ -91,15 +95,28 @@ const GameLoop: React.FC<GameLoopProps> = ({ mode, onGameOver, onExit }) => {
   const spawnTimerRef = useRef(0);
 
   const spawnOpponent = () => {
-    const lane = Math.floor(Math.random() * 4);
-    const laneX = lane * LANE_WIDTH + (LANE_WIDTH - CAR_WIDTH) / 2;
+    // 1. Identify lanes that are safe to spawn in (not occupied by a car near the top)
+    const safeLanes: number[] = [];
     
-    // Don't spawn if too close to another car
-    const tooClose = opponentsRef.current.some(o => 
-      Math.abs(o.y - (-200)) < 300 && o.lane === lane
-    );
+    for (let i = 0; i < LANE_COUNT; i++) {
+      // Check if this lane has a car near the spawn zone (top of screen)
+      // With larger cars, we need a larger buffer check
+      const isLaneBlocked = opponentsRef.current.some(o => 
+        o.lane === i && o.y < CAR_HEIGHT * 1.5 
+      );
+      
+      if (!isLaneBlocked) {
+        safeLanes.push(i);
+      }
+    }
 
-    if (!tooClose) {
+    if (safeLanes.length > 0) {
+      // Pick a random safe lane
+      const lane = safeLanes[Math.floor(Math.random() * safeLanes.length)];
+      
+      // Strictly center the car in the lane
+      const laneX = lane * LANE_WIDTH + (LANE_WIDTH - CAR_WIDTH) / 2;
+      
       const type = Math.random() > 0.5 ? 'ENEMY' : 'CIVILIAN';
       // Enemy goes fast, Civilian goes slow
       const speed = type === 'ENEMY' ? Math.random() * 5 + 10 : Math.random() * 5 + 5;
@@ -107,10 +124,13 @@ const GameLoop: React.FC<GameLoopProps> = ({ mode, onGameOver, onExit }) => {
         ? [COLORS.ENEMY_1, COLORS.ENEMY_2, COLORS.ENEMY_3][Math.floor(Math.random() * 3)] 
         : '#94a3b8'; // slate-400
 
+      // Add a random vertical offset
+      const startY = -CAR_HEIGHT - Math.random() * 200;
+
       opponentsRef.current.push({
-        id: Math.random(),
+        id: Date.now() + Math.random(),
         x: laneX,
-        y: -200,
+        y: startY,
         width: CAR_WIDTH,
         height: CAR_HEIGHT,
         speed: speed, // Absolute speed of opponent
@@ -144,20 +164,20 @@ const GameLoop: React.FC<GameLoopProps> = ({ mode, onGameOver, onExit }) => {
     // Steering
     if (player.speed > 0.5) {
         if (keysPressed.current['ArrowLeft'] || keysPressed.current['KeyA'] || keysPressed.current['TouchLeft']) {
-        player.x -= TURN_SPEED * dt;
+          player.x -= TURN_SPEED * dt;
         }
         if (keysPressed.current['ArrowRight'] || keysPressed.current['KeyD'] || keysPressed.current['TouchRight']) {
-        player.x += TURN_SPEED * dt;
+          player.x += TURN_SPEED * dt;
         }
     }
 
     // Wall Collision
-    if (player.x < 20) {
-        player.x = 20;
+    if (player.x < GRASS_WIDTH) {
+        player.x = GRASS_WIDTH;
         player.speed *= 0.9; // Friction on wall
     }
-    if (player.x > CANVAS_WIDTH - player.width - 20) {
-        player.x = CANVAS_WIDTH - player.width - 20;
+    if (player.x > CANVAS_WIDTH - player.width - GRASS_WIDTH) {
+        player.x = CANVAS_WIDTH - player.width - GRASS_WIDTH;
         player.speed *= 0.9;
     }
 
@@ -177,8 +197,6 @@ const GameLoop: React.FC<GameLoopProps> = ({ mode, onGameOver, onExit }) => {
 
     opponentsRef.current.forEach(opp => {
       // Relative movement: Opponent moves down if player is faster than them
-      // Or rather: Global world moves down by player.speed. Opponent moves UP by their speed.
-      // Screen Y change = (PlayerSpeed - OpponentSpeed) * Factor
       const relativeSpeed = player.speed - (opp.speed * 0.6); 
       opp.y += relativeSpeed * 2 * dt;
     });
@@ -238,8 +256,8 @@ const GameLoop: React.FC<GameLoopProps> = ({ mode, onGameOver, onExit }) => {
 
     // Draw Road (Grass sides)
     ctx.fillStyle = COLORS.GRASS;
-    ctx.fillRect(0, 0, 20, CANVAS_HEIGHT);
-    ctx.fillRect(CANVAS_WIDTH - 20, 0, 20, CANVAS_HEIGHT);
+    ctx.fillRect(0, 0, GRASS_WIDTH, CANVAS_HEIGHT);
+    ctx.fillRect(CANVAS_WIDTH - GRASS_WIDTH, 0, GRASS_WIDTH, CANVAS_HEIGHT);
 
     // Lane Markers
     ctx.strokeStyle = COLORS.MARKER;
@@ -247,10 +265,11 @@ const GameLoop: React.FC<GameLoopProps> = ({ mode, onGameOver, onExit }) => {
     ctx.setLineDash([40, 60]);
     ctx.lineDashOffset = -roadOffsetRef.current;
     
-    for (let i = 1; i < 4; i++) {
+    for (let i = 1; i < LANE_COUNT; i++) {
       ctx.beginPath();
-      ctx.moveTo(i * (CANVAS_WIDTH / 4), -100);
-      ctx.lineTo(i * (CANVAS_WIDTH / 4), CANVAS_HEIGHT + 100);
+      const x = i * LANE_WIDTH;
+      ctx.moveTo(x, -100);
+      ctx.lineTo(x, CANVAS_HEIGHT + 100);
       ctx.stroke();
     }
 
@@ -305,7 +324,7 @@ const GameLoop: React.FC<GameLoopProps> = ({ mode, onGameOver, onExit }) => {
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [update, render]); // Dependencies stable
+  }, [update, render]); 
 
   return (
     <div className="relative w-full h-full flex items-center justify-center bg-black overflow-hidden">
@@ -319,7 +338,7 @@ const GameLoop: React.FC<GameLoopProps> = ({ mode, onGameOver, onExit }) => {
             className="max-h-[100vh] w-full max-w-[600px] object-contain shadow-2xl"
         />
 
-        {/* Mobile Controls Overlay (Visible on touch devices or small screens) */}
+        {/* Mobile Controls Overlay */}
         <div className="absolute bottom-8 w-full max-w-[600px] px-6 flex justify-between pointer-events-auto sm:hidden">
             <div className="flex gap-4">
                 <button 

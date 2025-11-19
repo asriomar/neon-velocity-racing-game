@@ -1,3 +1,4 @@
+
 import { CarObject, Particle } from '../types';
 import { CANVAS_WIDTH, LANE_WIDTH } from '../constants';
 
@@ -41,43 +42,57 @@ export const drawRoundedRect = (
 export const drawCar = (ctx: CanvasRenderingContext2D, car: CarObject) => {
   ctx.save();
   
+  const w = car.width;
+  const h = car.height;
+
   // Shadow
   ctx.fillStyle = 'rgba(0,0,0,0.5)';
-  drawRoundedRect(ctx, car.x + 5, car.y + 5, car.width, car.height, 10);
+  drawRoundedRect(ctx, car.x + 8, car.y + 8, w, h, 15);
 
   // Body
   ctx.fillStyle = car.color;
-  drawRoundedRect(ctx, car.x, car.y, car.width, car.height, 8);
+  drawRoundedRect(ctx, car.x, car.y, w, h, 12);
 
-  // Roof/Windshield
-  ctx.fillStyle = '#1e293b';
-  drawRoundedRect(ctx, car.x + 5, car.y + 20, car.width - 10, car.height - 40, 5);
+  // Hood Details (Racing Stripe or Vent)
+  ctx.fillStyle = 'rgba(0,0,0,0.1)';
+  drawRoundedRect(ctx, car.x + w * 0.3, car.y + 10, w * 0.4, h * 0.25, 5);
 
-  // Headlights (if facing forward, but here all cars face 'up' relative to movement except obstacles which are just cars)
-  // Let's assume player faces up (y decreases visually?), actually in vertical scroller:
-  // Objects move DOWN (y increases). Player stays fixed Y. 
-  // So everyone faces UP (towards top of screen).
+  // Roof/Windshield Area
+  ctx.fillStyle = '#1e293b'; // Dark glass
+  // Windshield + Roof + Rear Window block
+  drawRoundedRect(ctx, car.x + 8, car.y + h * 0.25, w - 16, h * 0.55, 8);
   
+  // Roof Highlight (to distinguish glass from roof)
+  ctx.fillStyle = car.color; 
+  // A slightly smaller rect inside for the painted roof part
+  drawRoundedRect(ctx, car.x + 12, car.y + h * 0.35, w - 24, h * 0.3, 5);
+
   // Headlights (Top)
   ctx.fillStyle = '#fef08a'; // yellow-200
+  ctx.shadowColor = '#fef08a';
+  ctx.shadowBlur = 10;
   ctx.beginPath();
-  ctx.arc(car.x + 10, car.y + 5, 3, 0, Math.PI * 2);
-  ctx.arc(car.x + car.width - 10, car.y + 5, 3, 0, Math.PI * 2);
+  ctx.arc(car.x + 15, car.y + 10, 6, 0, Math.PI * 2);
+  ctx.arc(car.x + w - 15, car.y + 10, 6, 0, Math.PI * 2);
   ctx.fill();
+  ctx.shadowBlur = 0;
 
   // Taillights (Bottom)
   ctx.fillStyle = '#dc2626'; // red-600
-  ctx.fillRect(car.x + 8, car.y + car.height - 5, 10, 3);
-  ctx.fillRect(car.x + car.width - 18, car.y + car.height - 5, 10, 3);
+  ctx.shadowColor = '#dc2626';
+  ctx.shadowBlur = 5;
+  ctx.fillRect(car.x + 10, car.y + h - 10, 25, 6);
+  ctx.fillRect(car.x + w - 35, car.y + h - 10, 25, 6);
+  ctx.shadowBlur = 0;
 
   ctx.restore();
 };
 
 export const createExplosion = (x: number, y: number, color: string): Particle[] => {
   const particles: Particle[] = [];
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 30; i++) {
     const angle = Math.random() * Math.PI * 2;
-    const speed = Math.random() * 5 + 2;
+    const speed = Math.random() * 8 + 4;
     particles.push({
       id: Math.random(),
       x,
@@ -86,7 +101,7 @@ export const createExplosion = (x: number, y: number, color: string): Particle[]
       vy: Math.sin(angle) * speed,
       life: 1.0,
       color: color,
-      size: Math.random() * 4 + 2,
+      size: Math.random() * 6 + 3,
     });
   }
   return particles;
