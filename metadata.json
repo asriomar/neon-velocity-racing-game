@@ -1,0 +1,5 @@
+{
+  "name": "Neon Velocity",
+  "description": "A high-speed retro-futuristic racing game featuring Traffic Run and Time Attack modes. Built with React, Canvas API, and Tailwind CSS.",
+  "requestFramePermissions": []
+}
